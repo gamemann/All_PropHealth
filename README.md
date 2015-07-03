@@ -5,5 +5,6 @@ Video Link (short explanation): https://www.youtube.com/watch?v=mG5Iqmt_yK4
 
 # Requirements For Compile
 * Zombie Reloaded (https://forums.alliedmods.net/showthread.php?t=205567)
+* MultiColors (https://forums.alliedmods.net/showthread.php?t=247770)
 
 
