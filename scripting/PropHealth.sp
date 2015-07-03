@@ -2,8 +2,9 @@
 #include <sdktools>
 #include <sdkhooks>
 #include <zombiereloaded>
+#include <multicolors>
 
-#define PL_VERSION "1.0"
+#define PL_VERSION "1.1"
 #define MAXENTITIES 2048
 
 public Plugin:myinfo =
@@ -15,12 +16,21 @@ public Plugin:myinfo =
 	url = "GFLClan.com && TheDevelopingCommunity.com"
 };
 
+enum Props
+{
+	iHealth,
+	Float:fMultiplier
+};
+
 // ConVars
 new Handle:g_hConfigPath = INVALID_HANDLE;
 new Handle:g_hDefaultHealth = INVALID_HANDLE;
 new Handle:g_hDefaultMultiplier = INVALID_HANDLE;
 new Handle:g_hColor = INVALID_HANDLE;
 new Handle:g_hTeamRestriction = INVALID_HANDLE;
+new Handle:g_hPrint = INVALID_HANDLE;
+new Handle:g_hPrintType = INVALID_HANDLE;
+new Handle:g_hPrintMessage = INVALID_HANDLE;
 new Handle:g_hDebug = INVALID_HANDLE;
 
 // ConVar Values
@@ -29,10 +39,13 @@ new g_iDefaultHealth;
 new Float:g_fDefaultMultiplier;
 new String:g_sColor[32];
 new g_iTeamRestriction;
+new bool:g_bPrint;
+new g_iPrintType;
+new String:g_sPrintMessage[256];
 new bool:g_bDebug;
 
 // Other Variables
-new g_arrPropHealth[MAXENTITIES + 1];
+new g_arrProp[MAXENTITIES + 1][Props];
 new String:g_sLogFile[PLATFORM_MAX_PATH];
 
 public OnPluginStart()
@@ -53,7 +66,16 @@ public OnPluginStart()
 	HookConVarChange(g_hColor, CVarChanged);	
 	
 	g_hTeamRestriction = CreateConVar("sm_ph_team", "2", "What team are allowed to destroy props? 0 = no restriction, 1 = humans, 2 = zombies.");
-	HookConVarChange(g_hTeamRestriction, CVarChanged);	
+	HookConVarChange(g_hTeamRestriction, CVarChanged);		
+	
+	g_hPrint = CreateConVar("sm_ph_print", "1", "Print the prop's health when damaged to the attacker's chat?");
+	HookConVarChange(g_hPrint, CVarChanged);		
+	
+	g_hPrintType = CreateConVar("sm_ph_print_type", "1", "The print type (if \"sm_ph_print\" is set to 1). 1 = PrintToChat, 2 = PrintCenterText, 3 = PrintHintText.");
+	HookConVarChange(g_hPrintType, CVarChanged);		
+	
+	g_hPrintMessage = CreateConVar("sm_ph_print_message", "{darkred}[PH]{default}Prop Health: {lightgreen}%i", "The message to send to the client. Multicolors supported only for PrintToChat. %i = health value.");
+	HookConVarChange(g_hPrintMessage, CVarChanged);	
 	
 	g_hDebug = CreateConVar("sm_ph_debug", "0", "Enable debugging (logging will go to logs/prophealth-debug.log).");
 	HookConVarChange(g_hDebug, CVarChanged);
@@ -76,6 +98,9 @@ public OnConfigsExecuted()
 	g_fDefaultMultiplier = GetConVarFloat(g_hDefaultMultiplier);
 	GetConVarString(g_hColor, g_sColor, sizeof(g_sColor));
 	g_iTeamRestriction = GetConVarInt(g_hTeamRestriction);
+	g_bPrint = GetConVarBool(g_hPrint);
+	g_iPrintType = GetConVarInt(g_hPrintType);
+	GetConVarString(g_hPrintMessage, g_sPrintMessage, sizeof(g_sPrintMessage));
 	g_bDebug = GetConVarBool(g_hDebug);
 	
 	BuildPath(Path_SM, g_sLogFile, sizeof(g_sLogFile), "logs/prophealth-debug.log");
@@ -96,14 +121,15 @@ public OnEntitySpawned(iEnt)
 {
 	if (iEnt > MaxClients && IsValidEntity(iEnt))
 	{
-		g_arrPropHealth[iEnt] = -1;
+		g_arrProp[iEnt][iHealth] = -1;
+		g_arrProp[iEnt][fMultiplier] = 0.0;
 		SetPropHealth(iEnt);
 	}
 }
 
 public Action:Hook_OnTakeDamage(iEnt, &iAttacker, &iInflictor, &Float:fDamage, &iDamageType)
 {
-	if (!iAttacker || !IsClientInGame(iAttacker))
+	if (!iAttacker || iAttacker > MaxClients || !IsClientInGame(iAttacker))
 	{
 		if (g_bDebug)
 		{
@@ -123,7 +149,7 @@ public Action:Hook_OnTakeDamage(iEnt, &iAttacker, &iInflictor, &Float:fDamage, &
 		return Plugin_Continue;
 	}
 	
-	if (g_arrPropHealth[iEnt] < 0)
+	if (g_arrProp[iEnt][iHealth] < 0)
 	{
 		if (g_bDebug)
 		{
@@ -153,14 +179,14 @@ public Action:Hook_OnTakeDamage(iEnt, &iAttacker, &iInflictor, &Float:fDamage, &
 		return Plugin_Continue;
 	}
 	
-	g_arrPropHealth[iEnt] -= RoundToZero(fDamage);
+	g_arrProp[iEnt][iHealth] -= RoundToZero(fDamage);
 	
 	if (g_bDebug)
 	{
-		LogToFile(g_sLogFile, "Prop Damaged (Prop: %i) (Damage: %f) (Health: %i)", iEnt, fDamage, g_arrPropHealth[iEnt]);
+		LogToFile(g_sLogFile, "Prop Damaged (Prop: %i) (Damage: %f) (Health: %i)", iEnt, fDamage, g_arrProp[iEnt][iHealth]);
 	}
 	
-	if (g_arrPropHealth[iEnt] < 1)
+	if (g_arrProp[iEnt][iHealth] < 1)
 	{
 		// Destroy the prop.
 		if (g_bDebug)
@@ -171,7 +197,7 @@ public Action:Hook_OnTakeDamage(iEnt, &iAttacker, &iInflictor, &Float:fDamage, &
 		AcceptEntityInput(iEnt, "kill");
 		RemoveEdict(iEnt);
 		
-		g_arrPropHealth[iEnt] = -1;
+		g_arrProp[iEnt][iHealth] = -1;
 	}
 	
 	// Play a sound.
@@ -192,6 +218,26 @@ public Action:Hook_OnTakeDamage(iEnt, &iAttacker, &iInflictor, &Float:fDamage, &
 		}
 	}
 	
+	// Print To Client
+	if (g_bPrint && g_arrProp[iEnt][iHealth] > 0)
+	{
+		if (g_iPrintType == 1)
+		{
+			// Print To Chat.
+			CPrintToChat(iAttacker, g_sPrintMessage, g_arrProp[iEnt][iHealth]);
+		}
+		else if (g_iPrintType == 2)
+		{
+			// Print Center Text.
+			PrintCenterText(iAttacker, g_sPrintMessage, g_arrProp[iEnt][iHealth]);
+		}
+		else if (g_iPrintType == 3)
+		{
+			// Print Hint Text.
+			PrintHintText(iAttacker, g_sPrintMessage, g_arrProp[iEnt][iHealth]);
+		}
+	}
+	
 	return Plugin_Continue;
 }
 
@@ -203,7 +249,7 @@ public Action:Command_GetPropInfo(iClient, iArgs)
 	{
 		decl String:sModelName[PLATFORM_MAX_PATH];
 		GetEntPropString(iEnt, Prop_Data, "m_ModelName", sModelName, sizeof(sModelName));
-		PrintToChat(iClient, "\x03[PH]\x02(Model: %s) (Prop Health: %i) (Prop Index: %i)", sModelName, g_arrPropHealth[iEnt], iEnt);
+		PrintToChat(iClient, "\x03[PH]\x02(Model: %s) (Prop Health: %i) (Prop Index: %i)", sModelName, g_arrProp[iEnt][iHealth], iEnt);
 	}
 	else
 	{
@@ -254,17 +300,18 @@ stock SetPropHealth(iEnt)
 					LogToFile(g_sLogFile, "Prop model matches. (Prop: %i) (Prop Model: %s)", iEnt, sPropModel);
 				}
 				
-				g_arrPropHealth[iEnt] = KvGetNum(hKV, "health");
+				g_arrProp[iEnt][iHealth] = KvGetNum(hKV, "health");
 				
-				new Float: fMultiplier = KvGetFloat(hKV, "multiplier");
+				new Float: fMultiplier2 = KvGetFloat(hKV, "multiplier");
 				new iClientCount = GetRealClientCount();
-				new Float:fAddHealth = float(iClientCount) * fMultiplier;
+				new Float:fAddHealth = float(iClientCount) * fMultiplier2;
 				
-				g_arrPropHealth[iEnt] += RoundToZero(fAddHealth);
+				g_arrProp[iEnt][iHealth] += RoundToZero(fAddHealth);
+				g_arrProp[iEnt][fMultiplier] = fMultiplier2;
 				
 				if (g_bDebug)
 				{
-					LogToFile(g_sLogFile, "Custom prop's health set. (Prop: %i) (Prop Health: %i) (Multiplier: %f) (Added Health: %i) (Client Count: %i)", iEnt, g_arrPropHealth[iEnt], fMultiplier, RoundToZero(fAddHealth), iClientCount);
+					LogToFile(g_sLogFile, "Custom prop's health set. (Prop: %i) (Prop Health: %i) (Multiplier: %f) (Added Health: %i) (Client Count: %i)", iEnt, g_arrProp[iEnt][iHealth], fMultiplier2, RoundToZero(fAddHealth), iClientCount);
 				}
 			}
 		} while (KvGotoNextKey(hKV));
@@ -282,28 +329,29 @@ stock SetPropHealth(iEnt)
 		}
 	}
 	
-	if (g_arrPropHealth[iEnt] < 1)
+	if (g_arrProp[iEnt][iHealth] < 1)
 	{
-		g_arrPropHealth[iEnt] = g_iDefaultHealth;
+		g_arrProp[iEnt][iHealth] = g_iDefaultHealth;
+		g_arrProp[iEnt][fMultiplier] = g_fDefaultMultiplier;
 		
 		new iClientCount = GetRealClientCount();
 		new Float:fAddHealth = float(iClientCount) * g_fDefaultMultiplier;
 		
-		g_arrPropHealth[iEnt] += RoundToZero(fAddHealth);
+		g_arrProp[iEnt][iHealth] += RoundToZero(fAddHealth);
 		if (g_bDebug)
 		{
-			LogToFile(g_sLogFile, "Prop is being set to default health. (Prop: %i) (O - Default Health: %i) (Default Multiplier: %f) (Added Health: %i) (Health: %i) (Client Count: %i)", iEnt, g_iDefaultHealth, g_fDefaultMultiplier, RoundToZero(fAddHealth), g_arrPropHealth[iEnt], iClientCount);
+			LogToFile(g_sLogFile, "Prop is being set to default health. (Prop: %i) (O - Default Health: %i) (Default Multiplier: %f) (Added Health: %i) (Health: %i) (Client Count: %i)", iEnt, g_iDefaultHealth, g_fDefaultMultiplier, RoundToZero(fAddHealth), g_arrProp[iEnt][iHealth], iClientCount);
 		}
 	}
 	else
 	{
 		if (g_bDebug)
 		{
-			LogToFile(g_sLogFile, "Prop already has a health value! (Prop: %i) (Health: %i)", iEnt, g_arrPropHealth[iEnt]);
+			LogToFile(g_sLogFile, "Prop already has a health value! (Prop: %i) (Health: %i)", iEnt, g_arrProp[iEnt][iHealth]);
 		}
 	}
 	
-	if (g_arrPropHealth[iEnt] > 0 && !StrEqual(g_sColor, "-1", false))
+	if (g_arrProp[iEnt][iHealth] > 0 && !StrEqual(g_sColor, "-1", false))
 	{
 		if (g_bDebug)
 		{
@@ -317,7 +365,7 @@ stock SetPropHealth(iEnt)
 		SetEntityRenderColor(iEnt, StringToInt(sBit[0]), StringToInt(sBit[1]), StringToInt(sBit[2]), StringToInt(sBit[3]));
 	}
 	
-	if (g_arrPropHealth[iEnt] > 0)
+	if (g_arrProp[iEnt][iHealth] > 0)
 	{
 		SDKHook(iEnt, SDKHook_OnTakeDamage, Hook_OnTakeDamage);
 	}
