@@ -56,31 +56,14 @@ public void OnPluginStart()
 	CreateConVar("sm_ph_version", PL_VERSION, "Prop Health's version.");
 	
 	g_hConfigPath = CreateConVar("sm_ph_config_path", "configs/prophealth.props.cfg", "The path to the Prop Health config.");
-	HookConVarChange(g_hConfigPath, CVarChanged);
-	
 	g_hDefaultHealth = CreateConVar("sm_ph_default_health", "-1", "A prop's default health if not defined in the config file. -1 = Doesn't break.");
-	HookConVarChange(g_hDefaultHealth, CVarChanged);	
-	
 	g_hDefaultMultiplier = CreateConVar("sm_ph_default_multiplier", "325.00", "Default multiplier based on the player count (for zombies/humans). Default: 65 * 5 (65 damage by right-click knife with 5 hits)");
-	HookConVarChange(g_hDefaultMultiplier, CVarChanged);	
-	
 	g_hColor = CreateConVar("sm_ph_color", "255 0 0 255", "If a prop has a color, set it to this color. -1 = no color. uses RGBA.");
-	HookConVarChange(g_hColor, CVarChanged);	
-	
 	g_hTeamRestriction = CreateConVar("sm_ph_team", "2", "What team are allowed to destroy props? 0 = no restriction, 1 = humans, 2 = zombies.");
-	HookConVarChange(g_hTeamRestriction, CVarChanged);		
-	
 	g_hPrint = CreateConVar("sm_ph_print", "1", "Print the prop's health when damaged to the attacker's chat?");
-	HookConVarChange(g_hPrint, CVarChanged);		
-	
 	g_hPrintType = CreateConVar("sm_ph_print_type", "1", "The print type (if \"sm_ph_print\" is set to 1). 1 = PrintToChat, 2 = PrintCenterText, 3 = PrintHintText.");
-	HookConVarChange(g_hPrintType, CVarChanged);		
-	
 	g_hPrintMessage = CreateConVar("sm_ph_print_message", "{darkred}[PH]{default}Prop Health: {lightgreen}%i", "The message to send to the client. Multicolors supported only for PrintToChat. %i = health value.");
-	HookConVarChange(g_hPrintMessage, CVarChanged);	
-	
 	g_hDebug = CreateConVar("sm_ph_debug", "0", "Enable debugging (logging will go to logs/prophealth-debug.log).");
-	HookConVarChange(g_hDebug, CVarChanged);
 	
 	AutoExecConfig(true, "plugin.prop-health");
 	
@@ -88,13 +71,7 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_getpropinfo", Command_GetPropInfo);
 }
 
-public void CVarChanged(ConVar hCVar, const char[] sOldV, char[] sNewV)
-{
-	OnConfigsExecuted();
-}
-
-public void OnConfigsExecuted()
-{
+void LoadSettings(){
 	GetConVarString(g_hConfigPath, g_sConfigPath, sizeof(g_sConfigPath));
 	g_iDefaultHealth = GetConVarInt(g_hDefaultHealth);
 	g_fDefaultMultiplier = GetConVarFloat(g_hDefaultMultiplier);
@@ -106,6 +83,28 @@ public void OnConfigsExecuted()
 	g_bDebug = GetConVarBool(g_hDebug);
 	
 	BuildPath(Path_SM, g_sLogFile, sizeof(g_sLogFile), "logs/prophealth-debug.log");
+}
+
+public void CVarChanged(ConVar hCVar, const char[] sOldV, char[] sNewV)
+{
+	LoadSettings();
+}
+
+public void OnConfigsExecuted()
+{
+	// Load settings after config is executed:
+	LoadSettings();
+	
+	// Hook changes afterwards to avoid CVarChanged spam
+	HookConVarChange(g_hConfigPath, CVarChanged);
+	HookConVarChange(g_hDefaultHealth, CVarChanged);	
+	HookConVarChange(g_hDefaultMultiplier, CVarChanged);	
+	HookConVarChange(g_hColor, CVarChanged);	
+	HookConVarChange(g_hTeamRestriction, CVarChanged);		
+	HookConVarChange(g_hPrint, CVarChanged);		
+	HookConVarChange(g_hPrintType, CVarChanged);		
+	HookConVarChange(g_hPrintMessage, CVarChanged);	
+	HookConVarChange(g_hDebug, CVarChanged);
 }
 
 public void OnMapStart()
