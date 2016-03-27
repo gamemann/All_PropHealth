@@ -4,13 +4,15 @@
 #include <zombiereloaded>
 #include <multicolors>
 
+#pragma newdecls required
+
 #define PL_VERSION "1.1"
 #define MAXENTITIES 2048
 
-public Plugin:myinfo =
+public Plugin myinfo =
 {
 	name = "[All] Prop Health",
-	author = "Roy (Christian Deacon)",
+	author = "Roy (Christian Deacon) (minor fixes by N1ckles)",
 	description = "Props now have health!",
 	version = PL_VERSION,
 	url = "GFLClan.com && TheDevelopingCommunity.com"
@@ -23,32 +25,32 @@ enum Props
 };
 
 // ConVars
-new Handle:g_hConfigPath = INVALID_HANDLE;
-new Handle:g_hDefaultHealth = INVALID_HANDLE;
-new Handle:g_hDefaultMultiplier = INVALID_HANDLE;
-new Handle:g_hColor = INVALID_HANDLE;
-new Handle:g_hTeamRestriction = INVALID_HANDLE;
-new Handle:g_hPrint = INVALID_HANDLE;
-new Handle:g_hPrintType = INVALID_HANDLE;
-new Handle:g_hPrintMessage = INVALID_HANDLE;
-new Handle:g_hDebug = INVALID_HANDLE;
+ConVar g_hConfigPath = null;
+ConVar g_hDefaultHealth = null;
+ConVar g_hDefaultMultiplier = null;
+ConVar g_hColor = null;
+ConVar g_hTeamRestriction = null;
+ConVar g_hPrint = null;
+ConVar g_hPrintType = null;
+ConVar g_hPrintMessage = null;
+ConVar g_hDebug = null;
 
 // ConVar Values
-new String:g_sConfigPath[PLATFORM_MAX_PATH];
-new g_iDefaultHealth;
-new Float:g_fDefaultMultiplier;
-new String:g_sColor[32];
-new g_iTeamRestriction;
-new bool:g_bPrint;
-new g_iPrintType;
-new String:g_sPrintMessage[256];
-new bool:g_bDebug;
+char g_sConfigPath[PLATFORM_MAX_PATH];
+int g_iDefaultHealth;
+float g_fDefaultMultiplier;
+char g_sColor[32];
+int g_iTeamRestriction;
+bool g_bPrint;
+int g_iPrintType;
+char g_sPrintMessage[256];
+bool g_bDebug;
 
 // Other Variables
-new g_arrProp[MAXENTITIES + 1][Props];
-new String:g_sLogFile[PLATFORM_MAX_PATH];
+int g_arrProp[MAXENTITIES + 1][Props];
+char g_sLogFile[PLATFORM_MAX_PATH];
 
-public OnPluginStart()
+public void OnPluginStart()
 {
 	// ConVars
 	CreateConVar("sm_ph_version", PL_VERSION, "Prop Health's version.");
@@ -86,12 +88,12 @@ public OnPluginStart()
 	RegConsoleCmd("sm_getpropinfo", Command_GetPropInfo);
 }
 
-public CVarChanged(Handle:hCVar, const String:sOldV[], const String:sNewV[])
+public void CVarChanged(ConVar hCVar, const char[] sOldV, char[] sNewV)
 {
 	OnConfigsExecuted();
 }
 
-public OnConfigsExecuted()
+public void OnConfigsExecuted()
 {
 	GetConVarString(g_hConfigPath, g_sConfigPath, sizeof(g_sConfigPath));
 	g_iDefaultHealth = GetConVarInt(g_hDefaultHealth);
@@ -106,18 +108,18 @@ public OnConfigsExecuted()
 	BuildPath(Path_SM, g_sLogFile, sizeof(g_sLogFile), "logs/prophealth-debug.log");
 }
 
-public OnMapStart()
+public void OnMapStart()
 {
 	PrecacheSound("physics/metal/metal_box_break1.wav");
 	PrecacheSound("physics/metal/metal_box_break2.wav");
 }
 
-public OnEntityCreated(iEnt, const String:sClassname[])
+public void OnEntityCreated(int iEnt, const char[] sClassname)
 {
 	SDKHook(iEnt, SDKHook_SpawnPost, OnEntitySpawned);
 }
 
-public OnEntitySpawned(iEnt)
+public void OnEntitySpawned(int iEnt)
 {
 	if (iEnt > MaxClients && IsValidEntity(iEnt))
 	{
@@ -127,7 +129,7 @@ public OnEntitySpawned(iEnt)
 	}
 }
 
-public Action:Hook_OnTakeDamage(iEnt, &iAttacker, &iInflictor, &Float:fDamage, &iDamageType)
+public Action Hook_OnTakeDamage(int iEnt, int &iAttacker, int &iInflictor, float &fDamage, int &iDamageType)
 {
 	if (!iAttacker || iAttacker > MaxClients || !IsClientInGame(iAttacker))
 	{
@@ -201,18 +203,18 @@ public Action:Hook_OnTakeDamage(iEnt, &iAttacker, &iInflictor, &Float:fDamage, &
 	}
 	
 	// Play a sound.
-	new iRand = GetRandomInt(1, 2);
+	int iRand = GetRandomInt(1, 2);
 	switch (iRand)
 	{
 		case 1:
 		{
-			new Float:fPos[3];
+			float fPos[3];
 			GetEntPropVector(iEnt, Prop_Send, "m_vecOrigin", fPos);
 			EmitSoundToAll("physics/metal/metal_box_break1.wav", SOUND_FROM_WORLD, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, SNDVOL_NORMAL, SNDPITCH_NORMAL, -1, fPos);
 		}
 		case 2:
 		{
-			new Float:fPos[3];
+			float fPos[3];
 			GetEntPropVector(iEnt, Prop_Send, "m_vecOrigin", fPos);
 			EmitSoundToAll("physics/metal/metal_box_break2.wav", SOUND_FROM_WORLD, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, SNDVOL_NORMAL, SNDPITCH_NORMAL, -1, fPos);
 		}
@@ -241,13 +243,13 @@ public Action:Hook_OnTakeDamage(iEnt, &iAttacker, &iInflictor, &Float:fDamage, &
 	return Plugin_Continue;
 }
 
-public Action:Command_GetPropInfo(iClient, iArgs)
+public Action Command_GetPropInfo(int iClient, int iArgs)
 {
-	new iEnt = GetClientAimTarget(iClient, false);
+	int iEnt = GetClientAimTarget(iClient, false);
 	
 	if (iEnt > MaxClients && IsValidEntity(iEnt))
 	{
-		decl String:sModelName[PLATFORM_MAX_PATH];
+		char sModelName[PLATFORM_MAX_PATH];
 		GetEntPropString(iEnt, Prop_Data, "m_ModelName", sModelName, sizeof(sModelName));
 		PrintToChat(iClient, "\x03[PH]\x02(Model: %s) (Prop Health: %i) (Prop Index: %i)", sModelName, g_arrProp[iEnt][iHealth], iEnt);
 	}
@@ -259,9 +261,9 @@ public Action:Command_GetPropInfo(iClient, iArgs)
 	return Plugin_Handled;
 }
 
-stock SetPropHealth(iEnt)
+stock void SetPropHealth(int iEnt)
 {
-	decl String:sClassname[MAX_NAME_LENGTH];
+	char sClassname[MAX_NAME_LENGTH];
 	GetEntityClassname(iEnt, sClassname, sizeof(sClassname));
 	
 	if (!StrEqual(sClassname, "prop_physics", false) && !StrEqual(sClassname, "prop_physics_override", false) && !StrEqual(sClassname, "prop_physics_multiplayer", false))
@@ -269,25 +271,25 @@ stock SetPropHealth(iEnt)
 		return;
 	}
 
-	decl String:sFile[PLATFORM_MAX_PATH];
+	char sFile[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sFile, sizeof(sFile), g_sConfigPath);
 	
-	new Handle:hKV = CreateKeyValues("Props");
-	FileToKeyValues(hKV, sFile);
+	KeyValues hKV = CreateKeyValues("Props");
+	hKV.ImportFromFile(sFile);
 	
-	decl String:sPropModel[PLATFORM_MAX_PATH];
+	char sPropModel[PLATFORM_MAX_PATH];
 	GetEntPropString(iEnt, Prop_Data, "m_ModelName", sPropModel, sizeof(sPropModel));
 	if (g_bDebug)
 	{
 		LogToFile(g_sLogFile, "Prop model found! (Prop: %i) (Prop Model: %s)", iEnt, sPropModel);
 	}
 	
-	if (KvGotoFirstSubKey(hKV))
+	if (hKV.GotoFirstSubKey())
 	{
-		decl String:sBuffer[PLATFORM_MAX_PATH];
+		char sBuffer[PLATFORM_MAX_PATH];
 		do
 		{
-			KvGetSectionName(hKV, sBuffer, sizeof(sBuffer));
+			hKV.GetSectionName(sBuffer, sizeof(sBuffer));
 			if (g_bDebug)
 			{
 				LogToFile(g_sLogFile, "Checking prop model. (Prop: %i) (Prop Model: %s) (Section Model: %s)", iEnt, sPropModel, sBuffer);
@@ -300,11 +302,11 @@ stock SetPropHealth(iEnt)
 					LogToFile(g_sLogFile, "Prop model matches. (Prop: %i) (Prop Model: %s)", iEnt, sPropModel);
 				}
 				
-				g_arrProp[iEnt][iHealth] = KvGetNum(hKV, "health");
+				g_arrProp[iEnt][iHealth] = hKV.GetNum("health");
 				
-				new Float: fMultiplier2 = KvGetFloat(hKV, "multiplier");
-				new iClientCount = GetRealClientCount();
-				new Float:fAddHealth = float(iClientCount) * fMultiplier2;
+				float fMultiplier2 = hKV.GetFloat("multiplier");
+				int iClientCount = GetRealClientCount();
+				float fAddHealth = view_as<float>(iClientCount) * fMultiplier2;
 				
 				g_arrProp[iEnt][iHealth] += RoundToZero(fAddHealth);
 				g_arrProp[iEnt][fMultiplier] = fMultiplier2;
@@ -314,12 +316,12 @@ stock SetPropHealth(iEnt)
 					LogToFile(g_sLogFile, "Custom prop's health set. (Prop: %i) (Prop Health: %i) (Multiplier: %f) (Added Health: %i) (Client Count: %i)", iEnt, g_arrProp[iEnt][iHealth], fMultiplier2, RoundToZero(fAddHealth), iClientCount);
 				}
 			}
-		} while (KvGotoNextKey(hKV));
+		} while (hKV.GotoNextKey());
 	}
 	
-	if (hKV != INVALID_HANDLE)
+	if (hKV != null)
 	{
-		CloseHandle(hKV);
+		delete hKV;
 	}
 	else
 	{			
@@ -334,8 +336,8 @@ stock SetPropHealth(iEnt)
 		g_arrProp[iEnt][iHealth] = g_iDefaultHealth;
 		g_arrProp[iEnt][fMultiplier] = g_fDefaultMultiplier;
 		
-		new iClientCount = GetRealClientCount();
-		new Float:fAddHealth = float(iClientCount) * g_fDefaultMultiplier;
+		int iClientCount = GetRealClientCount();
+		float fAddHealth = float(iClientCount) * g_fDefaultMultiplier;
 		
 		g_arrProp[iEnt][iHealth] += RoundToZero(fAddHealth);
 		if (g_bDebug)
@@ -359,7 +361,7 @@ stock SetPropHealth(iEnt)
 		}
 		
 		// Set the entities color.
-		decl String:sBit[4][32];
+		char sBit[4][32];
 		
 		ExplodeString(g_sColor, " ", sBit, sizeof (sBit), sizeof (sBit[]));
 		SetEntityRenderColor(iEnt, StringToInt(sBit[0]), StringToInt(sBit[1]), StringToInt(sBit[2]), StringToInt(sBit[3]));
@@ -371,11 +373,11 @@ stock SetPropHealth(iEnt)
 	}
 }
 
-stock GetRealClientCount()
+stock int GetRealClientCount()
 {
-	new iCount;
+	int iCount;
 	
-	for (new i = 1; i <= MaxClients; i++)
+	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientInGame(i) && GetClientTeam(i) != 1)
 		{
